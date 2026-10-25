@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LC2K Simulyator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: workbench — editor panel on the left, machine state (registers, memory) on the right; stacks on phones */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#1b2430; --muted:#5d6878; --line:#d5dbe3;
+  --accent:#c2630a; --accent-ink:#ffffff; --hi:#fff1dd; --sp:#e3eefc; --ok:#1d7a46; --err:#b42318; --code:#f6f8fa;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1a2029; --ink:#e6ebf1; --muted:#98a3b3; --line:#2c3542;
+  --accent:#f0913a; --accent-ink:#1a1206; --hi:#3a2a14; --sp:#16283d; --ok:#4cc483; --err:#ff7b6e; --code:#141920; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a2029; --ink:#e6ebf1; --muted:#98a3b3; --line:#2c3542;
+  --accent:#f0913a; --accent-ink:#1a1206; --hi:#3a2a14; --sp:#16283d; --ok:#4cc483; --err:#ff7b6e; --code:#141920; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header h1{font-family:var(--f-display);font-weight:700;font-size:28px;margin:0;letter-spacing:.01em;text-wrap:balance}
+header p{margin:4px 0 0;color:var(--muted);max-width:70ch}
+.grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel h2{font-family:var(--f-display);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:500 14px var(--f-body);border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:7px 12px;border-radius:6px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+.sample{font-size:13px;padding:5px 10px}
+textarea{width:100%;min-height:420px;resize:vertical;font:13px/1.55 var(--f-mono);background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px;white-space:pre;overflow:auto;tab-size:8}
+.status{font-family:var(--f-mono);font-size:14px;padding:10px 12px;border-radius:6px;background:var(--code);border:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.status.ok{border-color:var(--ok)} .status.err{border-color:var(--err);color:var(--err)}
+.big{font-family:var(--f-display);font-weight:700;font-size:22px;color:var(--ok)}
+.regs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+@media (max-width:480px){.regs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.reg{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--code)}
+.reg b{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-weight:500}
+.reg div{font-family:var(--f-mono);font-size:16px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.reg.changed{border-color:var(--accent)}
+.tbl{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font:12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:3px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);font-family:var(--f-body);font-weight:600;font-size:12px;color:var(--muted)}
+tr.pc td{background:var(--hi)} tr.stk td{background:var(--sp)}
+td.lbl{color:var(--accent);font-weight:600}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px;border:1px solid var(--line)}
+.help{font-size:13.5px;color:var(--muted)} .help code{font-family:var(--f-mono);color:var(--ink)}
+details summary{cursor:pointer;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>LC2K Simulyator</h1>
+    <p>Assembly kodni chap tomonga qo'ying va <b>Ishga tushirish</b> tugmasini bosing. Natijada bajarilgan instruksiyalar soni, registrlar va xotira ko'rinadi. <b>Bir qadam</b> tugmasi buyruqlarni birma-bir bajaradi.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>Assembly kod (.as)</h2>
+      <div class="row">
+        <span class="help">Namuna:</span>
+        <button class="sample" id="s1">1-topshiriq</button>
+        <button class="sample" id="s2">To'liq dastur (absum + sumdown)</button>
+      </div>
+      <textarea id="src" spellcheck="false" aria-label="Assembly kod"></textarea>
+      <div class="row">
+        <button class="primary" id="run">Ishga tushirish</button>
+        <button id="step">Bir qadam</button>
+        <button id="reset">Boshidan</button>
+      </div>
+      <details class="help">
+        <summary>Qator qanday yoziladi</summary>
+        <p>Har bir qator: <code>label buyruq maydon0 maydon1 maydon2 izoh</code>. Label bo'lsa, qatorning eng boshidan yoziladi. Label bo'lmasa, qator probel yoki Tab bilan boshlanadi. Buyruqlar: <code>add nor lw sw beq jalr halt noop .fill</code>. Oxirgi maydondan keyingi so'zlar izoh hisoblanadi.</p>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2>Natija</h2>
+      <div id="status" class="status">Hali ishga tushirilmadi.</div>
+      <h2>Registrlar</h2>
+      <div class="regs" id="regs"></div>
+      <h2>Xotira</h2>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--hi)"></span>hozirgi buyruq (pc)</span>
+        <span><span class="sw" style="background:var(--sp)"></span>stackka yozilgan qiymatlar</span>
+      </div>
+      <div class="tbl"><table><thead><tr><th>Manzil</th><th>Label</th><th>Qiymat</th><th>Manba qator</th></tr></thead><tbody id="mem"></tbody></table></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const S1 = `        lw      0       5       n       r5 = n (10)
+        lw      0       6       pos1    r6 = 1
+        lw      0       7       mask    r7 = 0x80000000 (ishora biti)
+        nor     7       7       7       r7 = ~mask
+        add     0       0       3       r3 = sum = 0
+        add     0       0       1       r1 = i = 0
+loop    beq     1       5       done    i == n bo'lsa tugat
+        lw      1       2       arr     r2 = arr[i]
+        nor     2       2       4       r4 = ~x
+        nor     4       7       4       r4 = x & mask
+        beq     4       0       pos     manfiy emas -> pos
+        nor     2       2       2       r2 = ~x
+        add     2       6       2       r2 = -x
+pos     add     3       2       3       sum += |x|
+        add     1       6       1       i++
+        beq     0       0       loop
+done    sw      0       3       result  natijani xotiraga yoz
+        halt
+n       .fill   10
+pos1    .fill   1
+mask    .fill   -2147483648
+result  .fill   0
+arr     .fill   5
+        .fill   -3
+        .fill   8
+        .fill   -12
+        .fill   7
+        .fill   0
+        .fill   -1
+        .fill   4
+        .fill   -6
+        .fill   9`;
+const S2 = `        lw      0       5       stAdr   r5 = stack pointer
+        lw      0       6       absAdr  r6 = absum manzili
+        jalr    6       7               absum() chaqiruvi, r7 = qaytish manzili
+        sw      0       3       result  absum natijasi -> result
+        lw      0       1       six     r1 = 6 (argument k)
+        lw      0       6       sumAdr  r6 = sumdown manzili
+        jalr    6       7               sumdown(6) chaqiruvi
+        sw      0       3       sdres   sumdown natijasi -> sdres
+        halt
+absum   sw      5       7       0       push r7 (qaytish manzili)
+        sw      5       1       1       push r1
+        sw      5       2       2       push r2
+        sw      5       4       3       push r4
+        lw      0       6       four
+        add     5       6       5       sp += 4
+        add     0       0       3       r3 = sum = 0
+        add     0       0       1       r1 = i = 0
+aloop   lw      0       4       n       r4 = n
+        beq     1       4       adone   i == n bo'lsa tugat
+        lw      1       2       arr     r2 = arr[i]
+        lw      0       4       mask    r4 = 0x80000000
+        nor     2       2       6       r6 = ~x
+        nor     4       4       4       r4 = ~mask
+        nor     6       4       4       r4 = x & mask (ishora biti)
+        beq     4       0       apos    manfiy emas -> apos
+        nor     2       2       2       r2 = ~x
+        lw      0       4       pos1
+        add     2       4       2       r2 = ~x + 1 = -x
+apos    add     3       2       3       sum += |x|
+        lw      0       4       pos1
+        add     1       4       1       i++
+        beq     0       0       aloop
+adone   lw      0       6       neg4
+        add     5       6       5       sp -= 4
+        lw      5       7       0       pop r7
+        lw      5       1       1       pop r1
+        lw      5       2       2       pop r2
+        lw      5       4       3       pop r4
+        jalr    7       6               main ga qaytish
+sumdn   sw      5       7       0       push r7 (qaytish manzili)
+        sw      5       1       1       push r1 (k)
+        lw      0       6       two
+        add     5       6       5       sp += 2
+        beq     1       0       base    k == 0 -> baza holat
+        lw      0       6       neg1
+        add     1       6       1       r1 = k - 1
+        lw      0       6       sumAdr
+        jalr    6       7               r3 = sumdown(k-1)
+        lw      5       1       -1      k ni stackdan qayta o'qish
+        add     3       1       3       r3 = k + sumdown(k-1)
+        beq     0       0       sret
+base    add     0       0       3       r3 = 0
+sret    lw      0       6       neg2
+        add     5       6       5       sp -= 2
+        lw      5       7       0       pop r7
+        lw      5       1       1       pop r1
+        jalr    7       6               chaqiruvchiga qaytish
+n       .fill   10
+pos1    .fill   1
+neg1    .fill   -1
+two     .fill   2
+neg2    .fill   -2
+four    .fill   4
+neg4    .fill   -4
+six     .fill   6
+mask    .fill   -2147483648
+absAdr  .fill   absum
+sumAdr  .fill   sumdn
+stAdr   .fill   stack
+result  .fill   0
+sdres   .fill   0
+arr     .fill   5
+        .fill   -3
+        .fill   8
+        .fill   -12
+        .fill   7
+        .fill   0
+        .fill   -1
+        .fill   4
+        .fill   -6
+        .fill   9
+stack   .fill   0`;
+
+const $ = id => document.getElementById(id);
+const src = $('src');
+const OPS = {add:0,nor:1,lw:2,sw:3,beq:4,jalr:5,halt:6,noop:7};
+const ROLE = ['doim 0','','','','','','',''];
+const isNum = s => /^-?\d+$/.test(s);
+const s32 = x => x | 0;
+
+function assemble(text){
+  const lines = text.split('\n');
+  const prog = []; // {label, op, f:[...], srcLine}
+  lines.forEach((raw, ln) => {
+    const line = raw.replace(/\r$/, '');
+    if (!line.trim()) return;
+    const t = line.trim().split(/\s+/);
+    let label = '';
+    if (!/^\s/.test(line)) label = t.shift();
+    prog.push({label, op: t[0] || '', f: t.slice(1), srcLine: ln + 1, text: line.trim()});
+  });
+  const labels = {};
+  prog.forEach((p, i) => {
+    if (!p.label) return;
+    if (p.label.length > 6) throw err(p, `label '${p.label}' 6 belgidan uzun`);
+    if (!/^[A-Za-z]/.test(p.label)) throw err(p, `label '${p.label}' harf bilan boshlanishi kerak`);
+    if (p.label in labels) throw err(p, `label '${p.label}' takrorlangan`);
+    labels[p.label] = i;
+  });
+  function err(p, m){ return new Error(`${p.srcLine}-qator: ${m}`); }
+  const val = (p, s) => { if (s === undefined) throw err(p, 'maydon yetishmayapti'); if (isNum(s)) return parseInt(s, 10); if (s in labels) return labels[s]; throw err(p, `aniqlanmagan label '${s}'`); };
+  const reg = (p, s) => { if (!isNum(s) || +s < 0 || +s > 7) throw err(p, `registr 0..7 bo'lishi kerak, '${s ?? ''}' berilgan`); return +s; };
+  const mem = prog.map((p, pc) => {
+    const o = p.op;
+    if (o === '.fill') return s32(val(p, p.f[0]));
+    if (!(o in OPS)) throw err(p, `noma'lum buyruq '${o}'. Label bo'lmagan qator probel yoki Tab bilan boshlanishi kerak.`);
+    const c = OPS[o];
+    if (o === 'add' || o === 'nor') return (c << 22) | (reg(p, p.f[0]) << 19) | (reg(p, p.f[1]) << 16) | reg(p, p.f[2]);
+    if (o === 'lw' || o === 'sw' || o === 'beq') {
+      let off = val(p, p.f[2]);
+      if (o === 'beq' && !isNum(p.f[2])) off = off - pc - 1;
+      if (off < -32768 || off > 32767) throw err(p, `offset ${off} juda katta`);
+      return (c << 22) | (reg(p, p.f[0]) << 19) | (reg(p, p.f[1]) << 16) | (off & 0xffff);
+    }
+    if (o === 'jalr') return (c << 22) | (reg(p, p.f[0]) << 19) | (reg(p, p.f[1]) << 16);
+    return c << 22;
+  });
+  return {prog, labels, mem};
+}
+
+let M = null; // machine
+function load(){
+  const a = assemble(src.value);
+  const labelAt = {}; Object.entries(a.labels).forEach(([k, v]) => labelAt[v] = k);
+  M = {a, labelAt, mem: new Map(a.mem.map((v, i) => [i, v])), size: a.mem.length, reg: new Array(8).fill(0), pc: 0, count: 0, halted: false, stackW: new Set(), changed: new Set()};
+}
+function rd(a){ return M.mem.get(a) ?? 0; }
+function stepOnce(){
+  const w = rd(M.pc) >>> 0, op = (w >>> 22) & 7, A = (w >>> 19) & 7, B = (w >>> 16) & 7, D = w & 7;
+  let off = w & 0xffff; if (off & 0x8000) off -= 65536;
+  let next = M.pc + 1; M.count++; M.changed = new Set();
+  const r = M.reg;
+  switch (op) {
+    case 0: r[D] = s32(r[A] + r[B]); M.changed.add(D); break;
+    case 1: r[D] = s32(~(r[A] | r[B])); M.changed.add(D); break;
+    case 2: { const ad = r[A] + off; if (ad < 0 || ad > 65535) throw new Error(`lw noto'g'ri manzil ${ad} (pc ${M.pc})`); r[B] = rd(ad); M.changed.add(B); break; }
+    case 3: { const ad = r[A] + off; if (ad < 0 || ad > 65535) throw new Error(`sw noto'g'ri manzil ${ad} (pc ${M.pc})`); M.mem.set(ad, r[B]); if (ad >= M.size) M.size = ad + 1; if (A === 5) M.stackW.add(ad); break; }
+    case 4: if (r[A] === r[B]) next = M.pc + 1 + off; break;
+    case 5: r[B] = M.pc + 1; next = r[A]; M.changed.add(B); break;
+    case 6: M.halted = true; M.pc = next; return;
+    case 7: break;
+  }
+  r[0] = r[0]; M.pc = next;
+  if (M.pc < 0 || M.pc > 65535) throw new Error(`pc chegaradan chiqdi: ${M.pc}`);
+}
+function render(msg, cls){
+  const st = $('status'); st.className = 'status ' + (cls || '');
+  st.innerHTML = msg;
+  $('regs').innerHTML = M ? M.reg.map((v, i) => `<div class="reg${M.changed.has(i) ? ' changed' : ''}"><b>r${i}${i === 0 ? ' · doim 0' : i === 5 ? ' · sp' : i === 7 ? ' · qaytish' : ''}</b><div>${v}</div></div>`).join('') : '';
+  if (!M) { $('mem').innerHTML = ''; return; }
+  let rows = '';
+  for (let i = 0; i < M.size; i++) {
+    const p = M.a.prog[i];
+    const cls = [i === M.pc && !M.halted ? 'pc' : '', M.stackW.has(i) ? 'stk' : ''].join(' ').trim();
+    rows += `<tr class="${cls}"><td>${i}</td><td class="lbl">${M.labelAt[i] ?? ''}</td><td>${rd(i)}</td><td>${p ? esc(p.text.split(/\s+/).slice(p.label ? 1 : 0, (p.label ? 1 : 0) + (p.op === '.fill' ? 2 : 4)).join(' ')) : ''}</td></tr>`;
+  }
+  $('mem').innerHTML = rows;
+  const pcRow = document.querySelector('#mem tr.pc');
+  if (pcRow) pcRow.scrollIntoView({block: 'nearest'});
+}
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function results(){
+  const L = M.a.labels; const parts = [];
+  ['result','sdres'].forEach(k => { if (k in L) parts.push(`${k} = mem[${L[k]}] = ${rd(L[k])}`); });
+  return parts.length ? '\n' + parts.join('\n') : '';
+}
+function runAll(){
+  try {
+    if (!M || M.halted || M.count === 0) load();
+    let guard = 0;
+    while (!M.halted) { stepOnce(); if (++guard > 1000000) throw new Error("1 000 000 dan ortiq buyruq bajarildi — dastur cheksiz siklga tushgan bo'lishi mumkin. beq shartlarini tekshiring."); }
+    render(`<span class="big">machine halted</span>\ntotal of ${M.count} instructions executed${results()}`, 'ok');
+  } catch (e) { render('Xato: ' + esc(e.message), 'err'); }
+}
+function stepUI(){
+  try {
+    if (!M || M.halted) { load(); render(`Dastur yuklandi. pc = 0. Keyingi qadam uchun yana bosing.`); return; }
+    const pc = M.pc, p = M.a.prog[pc];
+    stepOnce();
+    if (M.halted) render(`<span class="big">machine halted</span>\ntotal of ${M.count} instructions executed${results()}`, 'ok');
+    else render(`${M.count}-qadam bajarildi: [${pc}] ${esc(p ? p.text : '?')}\nKeyingi: pc = ${M.pc}`);
+  } catch (e) { render('Xato: ' + esc(e.message), 'err'); }
+}
+$('run').onclick = () => { M = null; runAll(); };
+$('step').onclick = stepUI;
+$('reset').onclick = () => { try { load(); render('Dastur yuklandi. pc = 0.'); } catch (e) { M = null; render('Xato: ' + esc(e.message), 'err'); } };
+$('s1').onclick = () => { src.value = S1; M = null; runAll(); };
+$('s2').onclick = () => { src.value = S2; M = null; runAll(); };
+src.addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); const s = src.selectionStart; src.setRangeText('\t', s, src.selectionEnd, 'end'); } });
+src.addEventListener('input', () => { M = null; });
+src.value = S2; runAll();
+</script>
+</body>
+</html>
